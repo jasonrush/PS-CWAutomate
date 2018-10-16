@@ -39,7 +39,6 @@ function Get-CwaCredential () {
 function Connect-CwaServer (){
     $plaintextPassword = $Script:CwaCredential.GetnetworkCredential().Password
     Write-Verbose "Using credentials for: '$($Script:CwaCredential.UserName)'"
-Write-Verbose "Using password: '$plaintextPassword'"
     $loginPage= "$($Script:CwaHost)/cwa/api/v1/apitoken"
     Write-Verbose "Using login page '$loginPage'"
     $headers = @{
@@ -105,9 +104,7 @@ function Start-CwaScreenconnect( $computerID ){
         "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
     }
     $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $screenconnectPage -Headers $headers
-    $requestResult | gm
     $screenconnectUrl = ($requestResult.content) -replace '"',''
     start "$screenconnectUrl"
-#    $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $screenconnectPage -Headers $headers
 }
 #endregion *-CwaScreenconnect
