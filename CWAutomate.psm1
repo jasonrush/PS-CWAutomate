@@ -256,9 +256,9 @@ function Start-CwaScreenconnect {
         # If the computer name (and optionally client name) was passed, get a computer ID from it.
         if( [bool]($MyInvocation.BoundParameters.Keys -match 'ComputerName') ) {
             if( [bool]($MyInvocation.BoundParameters.Keys -match 'ClientName') ) {
-                $ComputerId = Get-CwaComputer -ComputerName $ComputerName -ClientName $ClientName
+                $ComputerId = (Get-CwaComputer -ComputerName $ComputerName -ClientName $ClientName).Id
             } else {
-                $ComputerId = Get-CwaComputer -ComputerName $ComputerName
+                $ComputerId = (Get-CwaComputer -ComputerName $ComputerName).Id
             }
         }
 
