@@ -35,6 +35,10 @@ function Get-CwaUrl {
     Param (
     )
 
+    if( $null -eq $Script:CwaUrl ){
+        Load-CwaUrl
+    }
+
     return $Script:CwaUrl
 }
 
@@ -44,6 +48,28 @@ function Remove-CwaUrl {
     )
 
     $Script:CwaUrl = $null
+}
+
+function Save-CwaUrl {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaUrl.txt"
+    )
+
+    $Script:CwaUrl | Out-File -FilePath $Path -NoNewline
+}
+
+function Load-CwaUrl {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaUrl.txt"
+    )
+
+    if( Test-Path -Path $Path ){
+        $Script:Cwaurl = Get-Content -Path $Path -Raw
+    }
 }
 #endregion *-CwaUrl
 
@@ -78,6 +104,31 @@ function Remove-CwaCredential {
 
     $Script:CwaCredential = $null
 }
+
+function Save-CwaCredential {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaCredential.xml"
+    )
+
+    $Script:CwaCredential | Export-CliXml -Path $path
+}
+
+function Load-CwaCredential {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaCredential.xml"
+    )
+
+    if( Test-Path -Path $Path ){
+        $Script:CwaCredential = Import-CliXml -Path $Path
+    }
+}
+
+
+
 #endregion *-CwaCredential
 
 #region *-CwaSession
@@ -106,11 +157,19 @@ function Start-CwaSession {
             Set-CwaCredential $Credential
         }
 
+        # If credentials haven't already been manually specified, attempt to load them.
+        if( $null -eq $Script:CwaCredential ){
+            Load-CwaCredential
+        }
+
         # If credentials haven't already been manually specified, prompt now.
         if( $null -eq $Script:CwaCredential ){
             Get-CwaCredential
         }
 
+        if( $null -eq $Script:CwaUrl ){
+            Load-CwaUrl
+        }
         # Connect to the URL, and attempt to create a session (get a session/API token).
         $plaintextPassword = $Script:CwaCredential.GetnetworkCredential().Password
         Write-Verbose "Using credentials for: '$($Script:CwaCredential.UserName)'"
@@ -134,6 +193,26 @@ function Stop-CwaSession(){
     # TODO: Would it be worth figuring out how to invalidate the API token?
     $script:CwaApiToken = $null
 }
+
+function Test-CwaSession(){
+    [CmdletBinding()]
+    Param (
+    )
+
+    $UserProfilesPage = "$($Script:CwaUrl)/cwa/api/v1/userprofiles"
+    $headers = @{
+        "Accept"="application/json, text/plain, */*"
+        "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+    }
+
+    try{
+        $requestResult = Invoke-WebRequest -Method GET -Uri $UserProfilesPage -Headers $headers
+        return $true
+    }
+    catch{
+        return $false
+    }
+}
 #endregion *-CwaSession
 
 #region *-CwaClient
@@ -144,6 +223,8 @@ function Get-CwaClient {
         [String]
         $Name = ''
     )
+
+    if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
     $clientsListPage = "$($Script:CwaUrl)/cwa/api/v1/clients?pageSize=-1&includeFields='Name'&orderBy=Name asc"
     if( '' -ne $Name ) {
@@ -159,7 +240,38 @@ function Get-CwaClient {
     # TODO: Verify valid JSON is returned
     $clients
 }
+
 #endregion *-CwaClient
+
+#region *-CwaLocation
+function Get-CwaLocation {
+    [CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$false)]
+        [String]
+        $Name = ''
+    )
+
+    if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+    $clientsListPage = "$($Script:CwaUrl)/cwa/api/v1/locations?pageSize=-1&includeFields=Name&orderBy=Name asc"
+<#
+    if( '' -ne $Name ) {
+        $encodedClientName = [uri]::EscapeDataString( $Name )
+        $clientsListPage = "$clientsListPage&condition=Name%20contains%20%27$encodedClientName%27"
+    }
+#>
+    $headers = @{
+        "Accept"="application/json, text/plain, */*"
+        "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+    }
+    $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $clientsListPage -Headers $headers
+    $locations = $requestResult | ConvertFrom-Json
+    # TODO: Verify valid JSON is returned
+    $locations
+}
+
+#endregion *-CwaLocation
 
 #region *-CwaComputer
 function Get-CwaComputer {
@@ -187,6 +299,8 @@ function Get-CwaComputer {
     )
 
     Process {
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
         $conditionString = "ComputerName contains '$ComputerName'"
 
         # If a CwaClient "object" was passed, use the information from that to filter computers.
@@ -225,17 +339,19 @@ function Start-CwaScreenconnect {
     [CmdletBinding()]
     Param (
         [parameter(Mandatory=$true,
+        Position=0,
         ParameterSetName="ComputerId")]
         [Int]
         $ComputerId,
 
-
         [parameter(Mandatory=$true,
+        Position=0,
         ParameterSetName="ComputerName")]
         [String]
         $ComputerName,
 
         [parameter(Mandatory=$false,
+        Position=1,
         ParameterSetName="ComputerName")]
         [String]
         $ClientName = '',
@@ -247,23 +363,29 @@ function Start-CwaScreenconnect {
     )
 
     Process {
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
         # If Get-CwaComputer was piped through the pipeline, use that information.
         if( $ComputerObject.Count -ne 0 ){
             Write-Verbose "Using computer object"
             $ComputerId = $ComputerObject.Id
         }
 
+        #TODO: Add a better way to handle if multiple computers match the name... An extra parameter or two, asking how to act when multiple matches are found? Default to out-gridview?
         # If the computer name (and optionally client name) was passed, get a computer ID from it.
         if( [bool]($MyInvocation.BoundParameters.Keys -match 'ComputerName') ) {
             if( [bool]($MyInvocation.BoundParameters.Keys -match 'ClientName') ) {
-                $ComputerId = (Get-CwaComputer -ComputerName $ComputerName -ClientName $ClientName).Id
+                $Computers = Get-CwaComputer -ComputerName $ComputerName -ClientName $ClientName
             } else {
-                $ComputerId = (Get-CwaComputer -ComputerName $ComputerName).Id
+                $Computers = Get-CwaComputer -ComputerName $ComputerName
             }
+            if( 1 -lt $Computers.Count ){
+                $Computers | Out-GridView -Title "Select computers to connect to" -OutputMode Multiple | Start-CwaScreenconnect
+                return # We will simply loop through all of them individually, for now...
+            }
+            $ComputerId = $Computers.Id
         }
 
-        # TODO: If using set ComputerName, get $computerID via Get-CwaComputer
-        # TODO: Allow passing CwaComputer "objects" via pipeline
         $screenconnectPage = "$($Script:CwaUrl)/cwa/api/v1/extensionactions/control/$computerID"
         $headers = @{
             "Accept"="application/json, text/plain, */*"
