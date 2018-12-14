@@ -395,6 +395,9 @@ function Start-CwaScreenconnect {
             "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
         }
         $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $screenconnectPage -Headers $headers
+        if( $null -eq $requestResult ){
+            Write-Error "Unable to retrieve ScreenConnect URL. Try again or restart your session (start-cwasession)."
+        }
         $screenconnectUrl = ($requestResult.content) -replace '"',''
         start "$screenconnectUrl"
     }
