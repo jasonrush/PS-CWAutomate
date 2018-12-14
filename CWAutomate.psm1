@@ -379,6 +379,9 @@ function Start-CwaScreenconnect {
             } else {
                 $Computers = Get-CwaComputer -ComputerName $ComputerName
             }
+            if( 0 -eq $Computers.Count ){
+                return # No matches found by filter.
+            }
             if( 1 -lt $Computers.Count ){
                 $Computers | Out-GridView -Title "Select computers to connect to" -OutputMode Multiple | Start-CwaScreenconnect
                 return # We will simply loop through all of them individually, for now...
