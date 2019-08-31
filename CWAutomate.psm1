@@ -435,9 +435,9 @@ function Start-CwaScreenconnect {
         $ComputerObject
     )
 
-    write-verbose "Start-CwaScreenconnect"
-
     Process {
+        write-verbose "Start-CwaScreenconnect"
+
         if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
         # If Get-CwaComputer was piped through the pipeline, use that information.
@@ -483,17 +483,21 @@ function Start-CwaScreenconnect {
 function Start-CwaScript {
     [CmdletBinding()]
     Param (
-        [parameter(Mandatory=$true,
-        Position=0,
-        ParameterSetName="ScriptId")]
+        [parameter(Mandatory=$false)]
         [Int]
-        $ScriptId,
+        $ScriptId = -1,
 
-        [parameter(Mandatory=$true,
-        Position=0,
-        ParameterSetName="ScriptName")]
+        [parameter(Mandatory=$false)]
         [String]
-        $ScriptName,
+        $ScriptName = "",
+
+        [parameter(Mandatory=$false)]
+        [Int]
+        $ComputerId = -1,
+
+        [parameter(Mandatory=$false)]
+        [String]
+        $ComputersList = "",
 
         [parameter(Mandatory=$true,
         ValueFromPipeline=$true,
@@ -502,10 +506,20 @@ function Start-CwaScript {
     )
 
     Process {
-        return
         write-verbose "Start-CwaScript"
-
+<#
         if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+        if( -not (
+                    ( $ScriptId -ne -1 )
+                    -or
+                    ( $ScriptName -ne "" )
+                 )
+        ){
+            Write-Error "No script specified"
+        }
+#>
+        return
 
         $conditionString = "ComputerName contains '$ComputerName'"
 
