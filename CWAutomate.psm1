@@ -147,6 +147,7 @@ function Start-CwaSession {
     )
 
     Process {
+        Write-Verbose "Start-CwaSession"
         # If a URL was passed, save it for later use.
         if( '' -ne $Url ){
             Set-CwaUrl $Url
@@ -178,11 +179,24 @@ function Start-CwaSession {
         $headers = @{
             'Accept'='application/json, text/plain, */*'
         }
+
+        # Figure out if 2-factor token is required
+        # TODO: ACTUALLY MAKE THIS FIGURE OUT IN CODE INSTEAD OF ASSUMING
+        $usesTwoFactor = $true
+        $MfaToken = ''
+
+        if( $usesTwoFactor ){
+            $MfaToken = Read-Host "Enter 2-Factor Token"
+            Write-Verbose "Using 2FA token: '$MfaToken'"
+        }
+
+        Write-Verbose "Using username: '$($Script:CwaCredential.UserName)'"
         $payload = @{
             UserName=$($Script:CwaCredential.UserName)
             Password=$plaintextPassword
-            TwoFactorPasscode=''
+            TwoFactorPasscode=$MfaToken
         }
+
         $requestResult = Invoke-RestMethod -Uri $loginPage -Method POST -Headers $headers -Body ($payload | ConvertTo-Json -Compress) -WebSession $Script:CwaWebRequestSession -ContentType "application/json;charset=UTF-8"
         # TODO: Add error checking on return value
         $script:CwaApiToken = $requestResult
@@ -190,6 +204,7 @@ function Start-CwaSession {
 }
 
 function Stop-CwaSession(){
+    Write-Verbose "Stop-CwaSession"
     # TODO: Would it be worth figuring out how to invalidate the API token?
     $script:CwaApiToken = $null
 }
@@ -198,6 +213,16 @@ function Test-CwaSession(){
     [CmdletBinding()]
     Param (
     )
+
+    Write-Verbose "Test-CwaSession"
+
+    if( $script:CwaApiToken -eq $null ){
+        Load-CwaSession
+    }
+
+    if( $Script:CwaUrl -eq $null ){
+        Load-CwaUrl
+    }
 
     $UserProfilesPage = "$($Script:CwaUrl)/cwa/api/v1/userprofiles"
     $headers = @{
@@ -213,6 +238,43 @@ function Test-CwaSession(){
         return $false
     }
 }
+
+function Remove-CwaSession {
+    [CmdletBinding()]
+    Param (
+    )
+
+    write-verbose "Remove-CwaSession"
+
+    $Script:CwaSession = $null
+}
+
+function Save-CwaSession {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaSession.xml"
+    )
+
+    write-verbose "Save-CwaSession"
+
+    $script:CwaApiToken | Export-CliXml -Path $path
+}
+
+function Load-CwaSession {
+    [CmdletBinding()]
+    Param (
+        [String]
+        $Path = "$env:USERPROFILE/.CwaSession.xml"
+    )
+
+    write-verbose "Load-CwaSession"
+
+    if( Test-Path -Path $Path ){
+        Write-Verbose "Loading session from $Path"
+        $script:CwaApiToken = Import-CliXml -Path $Path
+    }
+}
 #endregion *-CwaSession
 
 #region *-CwaClient
@@ -223,6 +285,8 @@ function Get-CwaClient {
         [String]
         $Name = ''
     )
+
+    write-verbose "Get-CwaClient"
 
     if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
@@ -252,6 +316,8 @@ function Get-CwaLocation {
         $Name = ''
     )
 
+    write-verbose "Get-CwaLocation"
+
     if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
     $clientsListPage = "$($Script:CwaUrl)/cwa/api/v1/locations?pageSize=-1&includeFields=Name&orderBy=Name asc"
@@ -274,6 +340,7 @@ function Get-CwaLocation {
 #endregion *-CwaLocation
 
 #region *-CwaComputer
+#TODO: SHOULD NOT ONLY ACCEPT OR ASSUME THAT PIPELINE WILL ONLY BE USED TO PASS CLIENTS, should accept locations, strings, etc?
 function Get-CwaComputer {
     [CmdletBinding()]
     Param (
@@ -299,6 +366,8 @@ function Get-CwaComputer {
     )
 
     Process {
+        write-verbose "Get-CwaComputer"
+
         if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
         $conditionString = "ComputerName contains '$ComputerName'"
@@ -306,9 +375,13 @@ function Get-CwaComputer {
         # If a CwaClient "object" was passed, use the information from that to filter computers.
         $clientInfo = $null
         if( $ClientObject.Count -ne 0 ){
-            Write-Verbose "Using client info from pipeline: $($ClientObject.Name)($($ClientObject.Id))"
-            $ClientName = $ClientObject.Name
-            $clientInfo = $ClientObject
+            if( $ClientObject -is [String] ){
+
+            }else{
+                Write-Verbose "Using client info from pipeline: $($ClientObject.Name)($($ClientObject.Id))"
+                $ClientName = $ClientObject.Name
+                $clientInfo = $ClientObject
+            }
         }
 
         # If client information was passed along, use that information to filter computers.
@@ -362,6 +435,8 @@ function Start-CwaScreenconnect {
         $ComputerObject
     )
 
+    write-verbose "Start-CwaScreenconnect"
+
     Process {
         if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
@@ -403,3 +478,152 @@ function Start-CwaScreenconnect {
     }
 }
 #endregion *-CwaScreenconnect
+
+#region *-CwaScript
+function Start-CwaScript {
+    [CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$true,
+        Position=0,
+        ParameterSetName="ScriptId")]
+        [Int]
+        $ScriptId,
+
+        [parameter(Mandatory=$true,
+        Position=0,
+        ParameterSetName="ScriptName")]
+        [String]
+        $ScriptName,
+
+        [parameter(Mandatory=$true,
+        ValueFromPipeline=$true,
+        ParameterSetName="ComputerObject")]
+        $ComputerObject
+    )
+
+    Process {
+        return
+        write-verbose "Start-CwaScript"
+
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+        $conditionString = "ComputerName contains '$ComputerName'"
+
+        # If a CwaClient "object" was passed, use the information from that to filter computers.
+        $clientInfo = $null
+        if( $ClientObject.Count -ne 0 ){
+            if( $ClientObject -is [String] ){
+
+            }else{
+                Write-Verbose "Using client info from pipeline: $($ClientObject.Name)($($ClientObject.Id))"
+                $ClientName = $ClientObject.Name
+                $clientInfo = $ClientObject
+            }
+        }
+
+        # If client information was passed along, use that information to filter computers.
+        if ( '' -ne $ClientName ) {
+            if( $null -eq $clientInfo ) {
+                $clientInfo = Get-CwaClient( $ClientName )
+            }
+            Write-Verbose "Client Name: $($clientInfo.Name)"
+            Write-Verbose "Client ID: $($clientInfo.Id)"
+            $conditionString = "$conditionString and Client.Id = $($clientInfo.Id)"
+        }
+        $conditionString = [uri]::EscapeDataString( $conditionString )
+        $computersPage = "$($Script:CwaUrl)/cwa/api/v1/computers?pageSize=$PageSize&page=$Page&condition=$conditionString&orderBy=computerName%20asc"
+        $headers = @{
+            "Accept"="application/json, text/plain, */*"
+            "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+        }
+        $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $computersPage -Headers $headers
+        $computers = $requestResult | ConvertFrom-Json
+        # TODO: Verify valid JSON is returned
+        $computers
+    }
+}
+
+function Get-CwaScript {
+    [CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$false)]
+        [String]
+        $ScriptName = '',
+
+        [parameter(Mandatory=$false)]
+        [String]
+        $ScriptId = '',
+
+        [parameter(Mandatory=$false)]
+        [String]
+        $FolderName = '',
+
+        [parameter(Mandatory=$false)]
+        [String]
+        $FolderId = ''
+    )
+
+    Process {
+        write-verbose "Get-CwaScript"
+
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+        $scriptsPage = "$($Script:CwaUrl)/cwa/api/v1/scripts?pageSize=-1&includeFields=Id,Folder,Name,Comments,Parameters"
+        $headers = @{
+            "Accept"="application/json, text/plain, */*"
+            "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+        }
+        $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $scriptsPage -Headers $headers
+        $scripts = $requestResult | ConvertFrom-Json
+
+        if( $ScriptName -ne '' ){
+            $scripts = $scripts | Where-Object { $_.Name -like "*$ScriptName*" }
+        }
+        if( $ScriptId -ne '' ){
+            $scripts = $scripts | Where-Object { $_.Id -eq $ScriptId }
+        }
+        if( $FolderName -ne '' ){
+            $scripts = $scripts | Where-Object { $_.Folder.Name -like "*$FolderName*" }
+        }
+        if( $FolderId -ne '' ){
+            $scripts = $scripts | Where-Object { $_.Folder.Id -eq $FolderId }
+        }
+        # TODO: Verify valid JSON is returned
+        $scripts
+    }
+}
+#endregion *-CwaScript
+
+function Get-CwaScriptFolder {
+    [CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$false)]
+        [String]
+        $FolderName = ''
+    )
+
+    Process {
+        write-verbose "Get-CwaScriptFolder"
+
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+
+        $foldersPage = "$($Script:CwaUrl)/cwa/api/v1/scriptfolders?pageSize=-1&includeFields=Id,ParentId,Name"
+
+        # If folder name was passed along, use that information to filter folders.
+        if( '' -ne $FolderName ){
+            $conditionString = "Name contains '$FolderName'"
+            $conditionString = [uri]::EscapeDataString( $conditionString )
+            $foldersPage = "$foldersPage&condition=$conditionString"
+        }
+
+        $headers = @{
+            "Accept"="application/json, text/plain, */*"
+            "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+        }
+        $requestResult = Invoke-WebRequest -Method GET -Body ($payload | ConvertTo-Json -Compress) -Uri $foldersPage -Headers $headers
+        $scriptFolders = $requestResult | ConvertFrom-Json
+        # TODO: Verify valid JSON is returned
+        $scriptFolders
+    }
+}
