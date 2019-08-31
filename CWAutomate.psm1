@@ -483,19 +483,30 @@ function Start-CwaScreenconnect {
 function Start-CwaScript {
     [CmdletBinding()]
     Param (
-        [parameter(Mandatory=$false)]
-        [Int]
-        $ScriptId = -1,
-
-        [parameter(Mandatory=$false)]
+        [parameter(Mandatory=$false,
+        ParameterSetName="Arguments",
+        Position=0)]
         [String]
         $ScriptName = "",
 
-        [parameter(Mandatory=$false)]
+        [parameter(Mandatory=$false,
+        ParameterSetName="Arguments")]
+        [Int]
+        $ScriptId = -1,
+
+        [parameter(Mandatory=$false,
+        ParameterSetName="Arguments",
+        Position=1)]
+        [String]
+        $ComputerName = "",
+
+        [parameter(Mandatory=$false,
+        ParameterSetName="Arguments")]
         [Int]
         $ComputerId = -1,
 
-        [parameter(Mandatory=$false)]
+        [parameter(Mandatory=$false,
+        ParameterSetName="Arguments")]
         [String]
         $ComputersList = "",
 
@@ -507,18 +518,26 @@ function Start-CwaScript {
 
     Process {
         write-verbose "Start-CwaScript"
-<#
         if( -not ( Test-CwaSession ) ){ Start-CwaSession }
 
+        # Verify a script name or ID was passed
         if( -not (
-                    ( $ScriptId -ne -1 )
-                    -or
-                    ( $ScriptName -ne "" )
+                    ( $ScriptId -ge 0 ) -or ( $ScriptName -ne "" )
                  )
         ){
             Write-Error "No script specified"
+            return
         }
-#>
+
+        # Verify one or more computers were somehow passed
+        if( -not (
+                    ( $ComputerId -ge 0 ) -or ( $ComputerName -ne "" ) -or ( $ComputersList -ne "" )
+                 )
+        ){
+            Write-Error "No computer(s) specified"
+            return
+        }
+
         return
 
         $conditionString = "ComputerName contains '$ComputerName'"
