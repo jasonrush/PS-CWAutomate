@@ -660,3 +660,101 @@ function Get-CwaScriptFolder {
         $scriptFolders
     }
 }
+
+#region *-CwaPowerShell
+function Invoke-CwaPowerShell {
+    [CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$true)]
+        [String]
+        $ComputerName = '',
+
+        [parameter(Mandatory=$true)]
+        [String]
+        $ScriptBlock = '',
+
+        [parameter(Mandatory=$false)]
+        [String]
+        $Path = '%windir%\system32',
+
+        [parameter(Mandatory=$false)]
+        [Bool]
+        $RunAsAdmin = $false
+    )
+
+    Process {
+        write-verbose "Invoke-CwaPowerShell"
+
+        if( -not ( Test-CwaSession ) ){ Start-CwaSession }
+
+        $computerObj = Get-CwaComputer $ComputerName
+
+        if( $computerObj -eq $null ){
+            Write-Verbose $computerObj
+            Write-Error "No computer objects returned!"
+            return
+        }
+
+        $computerID = $computerObj.ID
+
+        $CommandPromptPage = "$($Script:CwaUrl)/cwa/api/v1/Computers/$computerID/CommandPrompt?pagesize=-1&page=1&condition=null"
+        $headers = @{
+            "Accept"="application/json, text/plain, */*"
+            "Authorization"="bearer $($script:CwaApiToken.AccessToken)"
+        }
+
+# Serialization Test
+# TODO: Save result, output, and errors to variables, then serialize and return all
+$ScriptBlock = "[System.Management.Automation.PSSerializer]::Serialize( ( $($ScriptBlock) ) )"
+
+        $payload = @{
+            RunAsAdmin=$RunAsAdmin
+            UsePowerShell=$true
+            CommandText=$ScriptBlock
+            Directory=$Path
+        }
+
+        $requestResult = Invoke-RestMethod -Uri $CommandPromptPage -Method POST -Headers $headers -Body ($payload | ConvertTo-Json -Compress) -WebSession $Script:CwaWebRequestSession -ContentType "application/json;charset=UTF-8"
+#        $requestResult = Invoke-WebRequest -Method POST -Body ($payload | ConvertTo-Json -Compress) -Uri $CommandPromptPage -Headers $headers
+
+        if( $null -eq $requestResult ){
+            Write-Error "Unable to run script. Try again or restart your session (start-cwasession)."
+        }
+
+        if( $requestResult -notmatch "^[\d\.]+$" ){ # Regex for is-numeric
+            Write-Verbose $requestResult
+            Write-Error "Result was not a CommandExecute ID."
+            return
+        }
+
+        # Wait until a non-Pending result is returned
+        $CommandExecutePage = "$($Script:CwaUrl)/cwa/api/v1/Computers/$computerID/CommandExecute/$requestResult"
+
+        $loopCount = 0;
+        do {
+            # If not the first itteration through, wait 1 second between checks.
+            if( $loopCount -ne 0 ){
+                Write-Verbose "Sleeping 1 second... $($executeResult.Status)"
+                Write-Verbose $executeResult
+                Start-Sleep -Seconds 1
+            }
+            $loopCount++
+
+
+            $requestResult = Invoke-WebRequest -Method GET -Uri $CommandExecutePage -Headers $headers
+            $executeResult = $requestResult | ConvertFrom-Json
+        } while ( ($executeResult.Status -eq "Pending") -or ($executeResult.Status -eq "Executing") )
+
+
+# Serialization Test
+Write-Verbose $executeResult
+# TODO: Once the execution has been set to return everything, separate them all and display text, errors, etc, and return stuff?
+[System.Management.Automation.PSSerializer]::Deserialize( $executeResult.Output )
+
+
+        # TODO: Verify valid JSON is returned
+#        $executeResult
+
+    }
+}
+#endregion
