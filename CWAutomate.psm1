@@ -679,7 +679,11 @@ function Invoke-CwaPowerShell {
 
         [parameter(Mandatory=$false)]
         [Bool]
-        $RunAsAdmin = $false
+        $RunAsAdmin = $false,
+
+        [parameter(Mandatory=$false)]
+        [Bool]
+        $UsePowerShell = $true
     )
 
     Process {
@@ -709,7 +713,7 @@ $ScriptBlock = "[System.Management.Automation.PSSerializer]::Serialize( ( $($Scr
 
         $payload = @{
             RunAsAdmin=$RunAsAdmin
-            UsePowerShell=$true
+            UsePowerShell=$UsePowerShell
             CommandText=$ScriptBlock
             Directory=$Path
         }
