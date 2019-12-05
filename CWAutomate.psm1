@@ -699,6 +699,10 @@ function Invoke-CwaPowerShell {
             return
         }
 
+        if( $computerObj.Count -gt 1 ){
+            $computerObj = $computerObj | Where-Object { $_.ComputerName -eq $ComputerName }
+        }
+
         $computerID = $computerObj.ID
 
         $CommandPromptPage = "$($Script:CwaUrl)/cwa/api/v1/Computers/$computerID/CommandPrompt?pagesize=-1&page=1&condition=null"
